@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langgraph-checkpoint-clickhouse"
+version = "0.1.0"
+description = "ClickHouse checkpoint saver for LangGraph"
+readme = "README.md"
+requires-python = ">=3.10,<3.15"
+license = {text = "MIT"}
+authors = [{name = "LangGraph ClickHouse contributors"}]
+dependencies = [
+  "clickhouse-connect[async]>=1.7.1,<2.0.0",
+  "langgraph-checkpoint>=4.1.0,<5.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ryomar-kappa/langgraph-checkpoint-clickhouse"
+Repository = "https://github.com/ryomar-kappa/langgraph-checkpoint-clickhouse.git"
+Issues = "https://github.com/ryomar-kappa/langgraph-checkpoint-clickhouse/issues"
+
+[project.optional-dependencies]
+test = [
+  "langgraph==1.2.11",
+  "langgraph-checkpoint-conformance==0.0.2",
+  "pytest>=8.3,<10",
+  "pytest-asyncio>=0.25,<2",
+  "pytest-cov>=6,<8",
+  "ruff>=0.12,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/langgraph"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "tests",
+  "README.md",
+  "LICENSE",
+  "pyproject.toml",
+  "constraints-test.txt",
+  "docker-compose.yml",
+  "Dockerfile",
+]
+
+[tool.pytest.ini_options]
+addopts = "--strict-config --strict-markers --durations=10 -ra"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+  "integration: requires a reachable ClickHouse server",
+  "conformance: runs LangGraph's official checkpointer conformance suite",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "RUF"]

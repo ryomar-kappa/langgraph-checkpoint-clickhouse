@@ -1,0 +1,9 @@
+# Reproducible versions verified on 2026-08-18.
+clickhouse-connect==1.7.1
+langgraph-checkpoint==4.2.0
+langgraph-checkpoint-conformance==0.0.2
+langgraph==1.2.11
+pytest==9.1.1
+pytest-asyncio==1.4.0
+pytest-cov==7.1.0
+ruff==0.16.3

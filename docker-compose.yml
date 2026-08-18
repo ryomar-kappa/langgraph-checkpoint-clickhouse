@@ -1,0 +1,48 @@
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.3.18.32@sha256:17737849fd8806dbc74beda2c25e2254c88e36b93d4ccb8a06f8951a5852b284
+    environment:
+      CLICKHOUSE_DB: langgraph_test
+      CLICKHOUSE_USER: langgraph
+      CLICKHOUSE_PASSWORD: langgraph_test_password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "127.0.0.1:${CLICKHOUSE_HTTP_PORT:-18123}:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          clickhouse-client
+          --host "$$(hostname)"
+          --user "$${CLICKHOUSE_USER}"
+          --password "$${CLICKHOUSE_PASSWORD}"
+          --database "$${CLICKHOUSE_DB}"
+          --query "SELECT 1"
+          >/dev/null
+      interval: 2s
+      timeout: 5s
+      retries: 45
+      start_period: 10s
+
+  tests:
+    build:
+      context: .
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: langgraph_test
+      CLICKHOUSE_USER: langgraph
+      CLICKHOUSE_PASSWORD: langgraph_test_password
+    init: true
+
+volumes:
+  clickhouse-data:
