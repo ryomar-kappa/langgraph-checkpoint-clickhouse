@@ -5,6 +5,7 @@ from typing import Annotated
 from uuid import uuid4
 
 import pytest
+from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 from typing_extensions import TypedDict
@@ -33,7 +34,7 @@ def build_accumulating_graph(checkpointer):
 @pytest.mark.integration
 def test_real_graph_sync_accumulates_and_time_travels(sync_saver: ClickHouseSaver) -> None:
     graph = build_accumulating_graph(sync_saver)
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
 
     assert graph.invoke({"events": ["first"]}, config)["events"] == ["first", "tick"]
     assert graph.invoke({"events": ["second"]}, config)["events"] == [
@@ -51,7 +52,7 @@ def test_real_graph_sync_accumulates_and_time_travels(sync_saver: ClickHouseSave
 @pytest.mark.integration
 async def test_real_graph_async_accumulates(async_saver: AsyncClickHouseSaver) -> None:
     graph = build_accumulating_graph(async_saver)
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
 
     first = await graph.ainvoke({"events": ["first"]}, config)
     second = await graph.ainvoke({"events": ["second"]}, config)
@@ -79,7 +80,7 @@ def test_interrupt_and_resume_is_persisted(sync_saver: ClickHouseSaver) -> None:
         .add_edge("approval", END)
         .compile(checkpointer=sync_saver)
     )
-    config = {"configurable": {"thread_id": str(uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid4())}}
 
     paused = graph.invoke({"events": ["started"]}, config)
     assert paused["__interrupt__"][0].value == {"question": "approve?"}

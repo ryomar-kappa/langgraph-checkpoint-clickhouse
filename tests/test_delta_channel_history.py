@@ -5,7 +5,8 @@ from uuid import uuid4
 
 import clickhouse_connect
 import pytest
-from langgraph.checkpoint.base import Checkpoint
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import Checkpoint, get_checkpoint_id
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import _DeltaSnapshot
 
@@ -18,14 +19,17 @@ async def _put_step(
     saver: AsyncClickHouseSaver,
     *,
     thread_id: str,
-    parent: dict[str, Any] | None,
+    parent: RunnableConfig | None,
     step: int,
     values: dict[str, Any] | None = None,
     writes: list[tuple[str, Any]] | None = None,
-) -> dict[str, Any]:
-    config: dict[str, Any] = {"configurable": {"thread_id": thread_id, "checkpoint_ns": ""}}
+) -> RunnableConfig:
+    configurable: dict[str, Any] = {"thread_id": thread_id, "checkpoint_ns": ""}
     if parent is not None:
-        config["configurable"]["checkpoint_id"] = parent["configurable"]["checkpoint_id"]
+        parent_id = get_checkpoint_id(parent)
+        assert parent_id is not None
+        configurable["checkpoint_id"] = parent_id
+    config: RunnableConfig = {"configurable": configurable}
     channel_values = values or {}
     checkpoint = Checkpoint(
         v=1,
@@ -52,8 +56,8 @@ async def test_delta_history_uses_nearest_snapshot_and_excludes_head(
     async_saver: AsyncClickHouseSaver,
 ) -> None:
     thread_id = str(uuid4())
-    parent = None
-    configs = []
+    parent: RunnableConfig | None = None
+    configs: list[RunnableConfig] = []
     for step in range(6):
         values = {"ch": _DeltaSnapshot(step)} if step in {0, 3} else {}
         writes = [] if step in {0, 3} else [("ch", step)]
@@ -68,7 +72,9 @@ async def test_delta_history_uses_nearest_snapshot_and_excludes_head(
         configs.append(parent)
 
     history = await async_saver.aget_delta_channel_history(config=configs[-1], channels=["ch"])
-    assert history["ch"]["seed"].value == 3
+    channel_history = history["ch"]
+    assert "seed" in channel_history
+    assert channel_history["seed"].value == 3
     assert [write[2] for write in history["ch"]["writes"]] == [4]
     assert 5 not in [write[2] for write in history["ch"]["writes"]]
 
@@ -78,8 +84,8 @@ async def test_delta_history_channels_stop_independently(
     async_saver: AsyncClickHouseSaver,
 ) -> None:
     thread_id = str(uuid4())
-    parent = None
-    configs = []
+    parent: RunnableConfig | None = None
+    configs: list[RunnableConfig] = []
     for step in range(5):
         values: dict[str, Any] = {}
         if step == 1:
@@ -97,6 +103,8 @@ async def test_delta_history_channels_stop_independently(
         configs.append(parent)
 
     history = await async_saver.aget_delta_channel_history(config=configs[-1], channels=["a", "b"])
+    assert "seed" in history["a"]
+    assert "seed" in history["b"]
     assert history["a"]["seed"].value == "seed-a"
     assert history["b"]["seed"].value == "seed-b"
     assert [write[2] for write in history["a"]["writes"]] == [1, 2, 3]
@@ -108,8 +116,8 @@ async def test_delta_history_walks_to_root_without_seed(
     async_saver: AsyncClickHouseSaver,
 ) -> None:
     thread_id = str(uuid4())
-    parent = None
-    configs = []
+    parent: RunnableConfig | None = None
+    configs: list[RunnableConfig] = []
     for step in range(4):
         parent = await _put_step(
             async_saver,
@@ -161,6 +169,7 @@ async def test_delta_history_plain_migration_seed_includes_its_own_write(
     )
 
     history = await async_saver.aget_delta_channel_history(config=head, channels=["ch"])
+    assert "seed" in history["ch"]
     assert history["ch"]["seed"] == [10, 20]
     assert [write[2] for write in history["ch"]["writes"]] == [
         "at-seed",

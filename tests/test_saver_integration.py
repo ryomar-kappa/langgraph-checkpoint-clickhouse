@@ -1,14 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import clickhouse_connect
 import pytest
 from langchain_core.messages import HumanMessage
-from langgraph.checkpoint.base import Checkpoint, empty_checkpoint
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import (
+    Checkpoint,
+    CheckpointMetadata,
+    empty_checkpoint,
+    get_checkpoint_id,
+)
 from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.types import ERROR, _DeltaSnapshot
 
@@ -23,7 +30,7 @@ def _config(
     *,
     checkpoint_ns: str = "",
     checkpoint_id: str | None = None,
-) -> dict[str, Any]:
+) -> RunnableConfig:
     configurable: dict[str, Any] = {
         "thread_id": thread_id or str(uuid4()),
         "checkpoint_ns": checkpoint_ns,
@@ -43,23 +50,29 @@ def _checkpoint(values: dict[str, Any] | None = None) -> Checkpoint:
 @pytest.mark.integration
 def test_sync_roundtrip_list_none_and_typed_values(sync_saver: ClickHouseSaver) -> None:
     config = _config()
+    config["metadata"] = {"tenant": "alpha"}
     value = {
         "bytes": b"\x00\xff\x10",
         "when": datetime(2026, 8, 18, tzinfo=timezone.utc),
         "message": HumanMessage(content="ClickHouse round-trip"),
     }
     checkpoint = _checkpoint(value)
-    stored = sync_saver.put(
-        {**config, "metadata": {"tenant": "alpha"}},
-        checkpoint,
+    metadata = cast(
+        CheckpointMetadata,
         {"source": "input", "step": -1, "nested": {"enabled": True}},
+    )
+    stored = sync_saver.put(
+        config,
+        checkpoint,
+        metadata,
         checkpoint["channel_versions"],
     )
 
     loaded = sync_saver.get_tuple(stored)
     assert loaded is not None
     assert loaded.checkpoint["channel_values"] == value
-    assert loaded.metadata["tenant"] == "alpha"
+    loaded_metadata = cast(Mapping[str, Any], loaded.metadata)
+    assert loaded_metadata["tenant"] == "alpha"
 
     all_rows = list(sync_saver.list(None, filter={"nested": {"enabled": True}}))
     assert [row.checkpoint["id"] for row in all_rows] == [checkpoint["id"]]
@@ -238,10 +251,11 @@ def test_async_insert_without_acknowledgement_is_rejected() -> None:
 async def test_async_client_session_id_is_rejected(
     clickhouse_kwargs: dict[str, Any],
 ) -> None:
-    for options in (
+    option_sets: tuple[dict[str, Any], ...] = (
         {"session_id": f"lgcp-test-{uuid4()}"},
         {"settings": {"session_id": f"lgcp-test-{uuid4()}"}},
-    ):
+    )
+    for options in option_sets:
         client = await clickhouse_connect.get_async_client(**clickhouse_kwargs, **options)
         try:
             with pytest.raises(ValueError, match="session_id"):
@@ -255,12 +269,11 @@ async def test_delta_channel_history_uses_parent_chain(
     async_saver: AsyncClickHouseSaver,
 ) -> None:
     thread_id = str(uuid4())
-    parent: dict[str, Any] | None = None
-    configs: list[dict[str, Any]] = []
+    parent: RunnableConfig | None = None
+    configs: list[RunnableConfig] = []
     for step in range(4):
-        config = _config(thread_id)
-        if parent is not None:
-            config["configurable"]["checkpoint_id"] = parent["configurable"]["checkpoint_id"]
+        parent_id = get_checkpoint_id(parent) if parent is not None else None
+        config = _config(thread_id, checkpoint_id=parent_id)
         channel_values = {"delta": _DeltaSnapshot(10)} if step == 0 else {}
         checkpoint = Checkpoint(
             v=1,
@@ -281,6 +294,7 @@ async def test_delta_channel_history_uses_parent_chain(
         await async_saver.aput_writes(parent, [("delta", step + 1)], f"task-{step}")
 
     history = await async_saver.aget_delta_channel_history(config=configs[-1], channels=["delta"])
+    assert "seed" in history["delta"]
     assert history["delta"]["seed"].value == 10
     assert [write[2] for write in history["delta"]["writes"]] == [1, 2, 3]
 

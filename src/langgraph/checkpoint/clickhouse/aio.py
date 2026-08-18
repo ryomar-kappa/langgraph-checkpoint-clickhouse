@@ -278,7 +278,7 @@ class AsyncClickHouseSaver(SaverCodec, BaseCheckpointSaver[int]):
         if filter is None and limit is not None:
             query += " LIMIT %(limit)s"
             params["limit"] = int(limit)
-        thread_ids = [str(config["configurable"]["thread_id"])] if config is not None else None
+        thread_ids = [config_values(config)[0]] if config is not None else None
         async with self._locked(thread_ids):
             rows = (
                 await self.client.query(query, parameters=params, column_formats=BLOB_QUERY_FORMATS)

@@ -205,7 +205,9 @@ def checkpoint_config(thread_id: str, checkpoint_ns: str, checkpoint_id: str) ->
 
 
 def config_values(config: RunnableConfig) -> tuple[str, str, str | None]:
-    configurable = config["configurable"]
+    configurable = config.get("configurable")
+    if configurable is None or "thread_id" not in configurable:
+        raise ValueError("config.configurable.thread_id is required")
     return (
         str(configurable["thread_id"]),
         str(configurable.get("checkpoint_ns", "")),
@@ -322,7 +324,9 @@ class SaverCodec:
         predicates: list[str] = []
         parameters: dict[str, Any] = {}
         if config is not None:
-            configurable = config["configurable"]
+            configurable = config.get("configurable")
+            if configurable is None or "thread_id" not in configurable:
+                raise ValueError("config.configurable.thread_id is required")
             predicates.append("thread_id = %(thread_id)s")
             parameters["thread_id"] = str(configurable["thread_id"])
             if "checkpoint_ns" in configurable and configurable["checkpoint_ns"] is not None:
@@ -485,7 +489,7 @@ SELECT
 FROM {table} FINAL
 """
 
-BLOB_QUERY_FORMATS = {
+BLOB_QUERY_FORMATS: dict[str, str | dict[str, str]] = {
     "checkpoint_blob": "bytes",
     "metadata_blob": "bytes",
     "value_blob": "bytes",
