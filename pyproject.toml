@@ -15,19 +15,30 @@ dependencies = [
   "langgraph-checkpoint>=4.1.0,<5.0.0",
 ]
 
+[project.scripts]
+langgraph-checkpoint-clickhouse-migrate = "langgraph.checkpoint.clickhouse.migration:main"
+
 [project.urls]
 Homepage = "https://github.com/ryomar-kappa/langgraph-checkpoint-clickhouse"
 Repository = "https://github.com/ryomar-kappa/langgraph-checkpoint-clickhouse.git"
 Issues = "https://github.com/ryomar-kappa/langgraph-checkpoint-clickhouse/issues"
 
 [project.optional-dependencies]
+migration = [
+  "alembic>=1.16,<2",
+  "clickhouse-connect[alembic]>=1.7.1,<2.0.0",
+  "SQLAlchemy>=1.4.40,<3",
+]
 test = [
+  "alembic>=1.16,<2",
+  "clickhouse-connect[alembic]>=1.7.1,<2.0.0",
   "langgraph==1.2.11",
   "langgraph-checkpoint-conformance==0.0.2",
   "pytest>=8.3,<10",
   "pytest-asyncio>=0.25,<2",
   "pytest-cov>=6,<8",
   "ruff>=0.12,<1",
+  "SQLAlchemy>=1.4.40,<3",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -1,5 +1,7 @@
 # Reproducible versions verified on 2026-08-18.
 clickhouse-connect==1.7.1
+alembic==1.19.1
+SQLAlchemy==2.0.52
 langgraph-checkpoint==4.2.0
 langgraph-checkpoint-conformance==0.0.2
 langgraph==1.2.11
